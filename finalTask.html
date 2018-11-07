@@ -1,0 +1,374 @@
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script><script type="text/javascript">
+    //The following section contains the java script functions for the polygon drawing tool
+    //Scrip based on code from....
+    
+    // define perimeter: save the location of clicks
+    var perimeter = new Array();
+    
+    // define the number of points in each polygon
+    // initial point is counted twice
+    var numArr = new Array();
+    
+    // whether the task has been completed
+    var complete = false;
+    
+    // define canvas to draw graphs
+    var canvas;
+    
+    // define ctx to draw the path
+    var ctx;
+    
+    // function for detecting intersection
+    function line_intersects(p0, p1, p2, p3) {
+        var s1_x, s1_y, s2_x, s2_y;
+        s1_x = p1['x'] - p0['x'];
+        s1_y = p1['y'] - p0['y'];
+        s2_x = p3['x'] - p2['x'];
+        s2_y = p3['y'] - p2['y'];
+        var s, t;
+        s = (-s1_y * (p0['x'] - p2['x']) + s1_x * (p0['y'] - p2['y'])) / (-s2_x * s1_y + s1_x * s2_y);
+        t = ( s2_x * (p0['y'] - p2['y']) - s2_y * (p0['x'] - p2['x'])) / (-s2_x * s1_y + s1_x * s2_y);
+        if (s >= 0 && s <= 1 && t >= 0 && t <= 1)
+        {
+            // Collision detected
+            return true;
+        }
+        return false; // No collision
+    }
+    
+    // function for fill the rectangle of unfinished polygons
+    function point(x, y){
+        ctx.fillStyle="white";
+        //ctx.strokeStyle = "white";
+        ctx.fillRect(x-3,y-3,6,6);
+        ctx.moveTo(x,y);
+    }
+    
+    // function for undo: step 1. change perimeter and numArr; step 2. replot the figure.
+    function undo(){
+        ctx = undefined;
+        complete = false;
+        var ss = 0;
+        if (numArr.length > 0){
+            for (var i=0; i<numArr.length; i++){
+                ss = ss + numArr[i] + 1;
+            }
+            
+            // case 1. perimeter.length == ss
+            if (perimeter.length == ss){
+                perimeter.pop();
+                perimeter.pop();
+                numArr.pop();
+                $("#submitButton").attr("disabled", "disabled"); // not allowed to submit
+            }
+            else if (perimeter.length == (ss + 1)){
+                perimeter.pop();
+                complete = true;
+                $("#submitButton").removeAttr("disabled"); // allowed to submit
+            }
+            else {
+                perimeter.pop();
+                $("#submitButton").attr("disabled", "disabled"); // not allowed to submit
+            }
+        } 
+        else{
+            perimeter.pop();
+            $("#submitButton").attr("disabled", "disabled"); // not allowed to submit   
+        }
+        // redraw the lines and rectangles
+        start(true);
+    }
+    
+    // function for clear everything
+    function clear_canvas(){
+        ctx = undefined;
+        perimeter = new Array();
+        numArr = new Array();
+        complete = false;
+        $("#submitButton").attr("disabled", "disabled");
+        document.getElementById('coordinates').value = '';
+        start();
+    }
+    
+    // function for start
+    function start(with_draw) {
+        canvas = document.getElementById("jPolygon");
+        var img = new Image();
+        img.src = canvas.getAttribute('data-imgsrc');
+        img.onload = function(){
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            if(with_draw == true){
+                draw();
+            }
+        }
+    }
+   
+    // function for drawing
+    function draw(){
+        var ss = 0;
+        // step 1. plot all finished polygons in blue lines
+        if (numArr.length > 0){
+            for (var i=0; i<numArr.length; i++){
+                ctx.lineWidth = 2;
+                ctx.lineCap = "square";
+                ctx.strokeStyle = 'blue';
+                ctx.beginPath();
+                for (var j=ss; j<(ss+numArr[i]); j++){
+                    if(j==ss){
+                        ctx.moveTo(perimeter[j]['x'],perimeter[j]['y']); 
+                        point(perimeter[j]['x'],perimeter[j]['y']);
+                    } else{
+                        ctx.lineTo(perimeter[j]['x'],perimeter[j]['y']);
+                        point(perimeter[j]['x'],perimeter[j]['y']);
+                    }
+                }
+                //ctx.closePath();
+                ctx.stroke();
+                ss = ss + numArr[i] + 1
+            }
+        }
+        // step 2. plot unfinished polygons in white lines
+        if (perimeter.length > ss){
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "white";
+            // the shape of line ends is square
+            ctx.lineCap = "square";
+            ctx.beginPath();
+            for(var j=ss; j<perimeter.length; j++){
+                if(j==ss){
+                    ctx.moveTo(perimeter[j]['x'],perimeter[j]['y']);
+                    point(perimeter[j]['x'],perimeter[j]['y']);
+                }
+                else{
+                    ctx.lineTo(perimeter[j]['x'],perimeter[j]['y']);
+                    point(perimeter[j]['x'],perimeter[j]['y']);
+                }
+            }
+            // ctx.stroke function draws the path
+            ctx.stroke();
+        }
+        
+        // print coordinates
+        if(perimeter.length == 0){
+            document.getElementById('coordinates').value = '';
+        } else {
+            document.getElementById('coordinates').value = JSON.stringify(perimeter);
+        }
+    }
+    
+    // function for detecting intersection
+    function check_intersect(x, y){
+        var ss = 0;
+        // if there are finished polygons, check intersect
+        if (numArr.length > 0){
+            // calculate the sum of points
+            for(var i=0; i<numArr.length; i++){
+                ss = ss + numArr[i] + 1
+            }
+            if (perimeter.length == ss){
+                return false;
+            }
+            var p0 = new Array();
+            var p1 = new Array();
+            var p2 = new Array();
+            var p3 = new Array();
+            p2['x'] = perimeter[perimeter.length-1]['x'];
+            p2['y'] = perimeter[perimeter.length-1]['y'];
+            p3['x'] = x;
+            p3['y'] = y;
+            ss = 0;
+            for (var i=0; i<numArr.length; i++){
+                for (var j=ss; j<(ss+numArr[i]-1); j++){
+                    p0['x'] = perimeter[j]['x'];
+                    p0['y'] = perimeter[j]['y'];
+                    p1['x'] = perimeter[j+1]['x'];
+                    p1['y'] = perimeter[j+1]['y'];
+                    if(p1['x'] == p2['x'] && p1['y'] == p2['y']){ continue; }
+                    if(p0['x'] == p3['x'] && p0['y'] == p3['y']){ continue; }
+                    if(line_intersects(p0,p1,p2,p3)==true){
+                        return true;
+                    } 
+                }
+                ss = ss + numArr[i] + 1
+            }
+        }
+        // check whether intersect with current unfinished polygon
+        if(perimeter.length < 3){
+            return false;
+        }
+        if (perimeter.length > ss){
+            if(perimeter.length < (ss+3)){
+                return false;
+            }
+            var p0 = new Array();
+            var p1 = new Array();
+            var p2 = new Array();
+            var p3 = new Array();
+            p2['x'] = perimeter[perimeter.length-1]['x'];
+            p2['y'] = perimeter[perimeter.length-1]['y'];
+            p3['x'] = x;
+            p3['y'] = y;
+            for(var i=ss; i<perimeter.length-1; i++){
+                p0['x'] = perimeter[i]['x'];
+                p0['y'] = perimeter[i]['y'];
+                p1['x'] = perimeter[i+1]['x'];
+                p1['y'] = perimeter[i+1]['y'];
+                if(p1['x'] == p2['x'] && p1['y'] == p2['y']){ continue; }
+                if(p0['x'] == p3['x'] && p0['y'] == p3['y']){ continue; }
+                if(line_intersects(p0,p1,p2,p3)==true){
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    
+    // function for click event
+    function point_it(event){
+        var rect, x, y;
+        if(event.ctrlKey){
+            // for fast undo use ctrl+click
+            undo();
+            return false;
+        }
+        else if(event.which === 3 || event.button === 2){
+            var ss = 0;
+            if (numArr.length>0){
+                for(var i=0; i<numArr.length; i++){
+                    ss = ss + numArr[i] + 1
+                }
+                if(perimeter.length < (ss+3)){
+                    alert('You need at least three points for a polygon');
+                    return false;   
+                }
+                x = perimeter[ss]['x'];
+                y = perimeter[ss]['y'];
+                if(check_intersect(x,y)){
+                    alert('The line you are drawing intersect another line');
+                    return false;
+                }
+                perimeter.push({'x':x,'y':y});
+                perimeter.push({'x':-1,'y':-1});
+                numArr.push(perimeter.length-ss-1);
+                draw();
+                $("#submitButton").removeAttr("disabled"); // allowed to submit
+                event.preventDefault();
+                return false;
+            }
+            else{
+                if(perimeter.length < 3){
+                    alert('You need at least three points for a polygon');
+                    return false;
+                }
+                x = perimeter[0]['x'];
+                y = perimeter[0]['y'];
+                if(check_intersect(x,y)){
+                    alert('The line you are drawing intersect another line');
+                    return false;
+                }
+                perimeter.push({'x':x,'y':y});
+                perimeter.push({'x':-1,'y':-1});
+                numArr.push(perimeter.length-ss-1);
+                draw();
+                $("#submitButton").removeAttr("disabled"); // allowed to submit
+                event.preventDefault();
+                return false;
+            }   
+        }
+        else{
+            rect = canvas.getBoundingClientRect();
+            x = event.clientX - rect.left;
+            y = event.clientY - rect.top;
+            if (perimeter.length>0 && x == perimeter[perimeter.length-1]['x'] && y == perimeter[perimeter.length-1]['y']){
+                // same point - double click
+                return false;
+            }
+            if(check_intersect(x,y)){
+                alert('The line you are drawing intersect another line');
+                return false;
+            }
+            perimeter.push({'x':x,'y':y});
+            draw();
+            $("#submitButton").attr("disabled", "disabled"); // not allowed to submit   
+            return false;
+        }
+        
+    }
+    
+</script><!-- Beguining of the html document-->
+<div style="display:inline-block;vertical-align:top;">
+<h1>Draw contours separating each palm tree from other trees</h1>
+
+<h3>Task:</h3>
+In this task, you need to find all the <b>palm</b> trees, and separate them from other trees using one or multiple contours.
+
+<h3>Instructions:</h3>
+
+<ul>
+	<li>First, you need to answer the question &quot;Are there palm trees in the image?&quot;. If there is no palm tree, you need to select &quot;No&quot;, and submit the HIT.</li>
+	<li>If there are palm trees, you need to select &quot;Yes&quot;, and draw one or multiple contours of them.</li>
+	<li>To draw a contour, use the <b>mouse left button</b> to click and connect points that <b>separate the palm trees from others</b>.</li>
+	<li>To finish the contour polygon use the <b>mouse right button</b>. This command will connect the first to the last point.</li>
+	<li>Remove the last point by clicking <b>Ctrl + mouse click</b> or click on the <b>Undo</b> button.</li>
+	<li>Clear all points by clicking on the <b>Reset</b> button.</li>
+	<li>In order to get accepted, you need to find <b> all the palm trees </b>, and separate them from other trees using <b>one or multiple contours</b>.</li>
+	<li>A good contour must be drawn <b>close to the palm tree boundary</b>, and use as many points as needed (on average 20 points is good).</li>
+	<li>In our last trial, we rejected many jobs that didn&#39;t follow the instructions.<br />
+	Please <b>take a look at the example figures</b> showing palm trees and acceptable final polygons: <a href="https://mys7wj4bapocidsvm.blob.core.windows.net/amazon-examples/example-1.png" target="_blank">Example 1 </a> <a href="https://mys7wj4bapocidsvm.blob.core.windows.net/amazon-examples/example-2.png" target="_blank">Example 2 </a> <a href="https://mys7wj4bapocidsvm.blob.core.windows.net/amazon-examples/example-3.png" target="_blank">Example 3</a><br />
+	Also take a look at those <b>rejectable</b> answers: <a href="https://mys7wj4bapocidsvm.blob.core.windows.net/amazon-examples/example-4.png" target="_blanck">Example 4: tree missed</a> <a href="https://mys7wj4bapocidsvm.blob.core.windows.net/amazon-examples/example-5.png" target="_blanck">Example 5: unclear boundary</a></li>
+</ul>
+
+<h3>Question:</h3>
+
+<div class="form-group"><label class="group-label">Are there palm trees in the image?</label>
+
+<div class="radio"><label><input autocomplete="off" id="option1" name="Tag4" required="" type="radio" value="yes" /> Yes </label></div>
+
+<div class="radio"><label><input autocomplete="off" id="option2" name="Tag4" required="" type="radio" value="no" /> No </label></div>
+
+<h3>Image:</h3>
+
+<p id="buttons"><input id="undo_button" type="button" value="Undo" /> <input id="reset_button" type="Reset" value="Reset" /></p>
+
+<p><!-- Coordinates input from user --><!-- <strong>Coordinates:</strong> <textarea disabled="disabled" id="coordinates" name="coordinates" style="width:300px; height:200px;"></textarea> --><input id="coordinates" name="coordinates" type="hidden" /></p>
+</div>
+
+<div id="imgframe" style="float:left"><!--change the data-imgsrc="${img_url}" -->
+<p><canvas data-imgsrc="https://mys7wj4bapocidsvm.blob.core.windows.net/one-thousand-images/img_0082.jpg" id="jPolygon" oncontextmenu="return false;" onmousedown="point_it(event)" style="cursor:crosshair"> Your browser does not support the HTML5 canvas tag. </canvas></p>
+</div>
+
+<div style="float:left; margin-left:20px;">
+<p><label for="comment"><em>Comment:</em></label><textarea id="comment_area" name="comment"></textarea></p>
+
+<p>Press <b>Left Click</b> to draw a point, <strong>CTRL+Click</strong> to undo or <strong>Right Click</strong> to close the polygon.</p>
+</div>
+<script type="text/javascript">
+       
+        $(document).ready(function(){
+            //create variables
+            
+            var perimeter = new Array();
+            var numArr = new Array();
+            var complete = false;
+            var canvas = document.getElementById("jPolygon");
+            var ctx;
+            var img = new Image();
+            img.src = canvas.getAttribute('data-imgsrc');
+            
+            clear_canvas();
+            //initialize butons
+            $("#reset_button").click(function(e) {
+                 clear_canvas();
+            });
+            $("#undo_button").click(function(e) {
+                 undo();
+            });
+            $("#submitButton").removeAttr("disabled"); // allowed to submit
+            $("#submitButton").detach().appendTo("#buttons");
+
+        });
+</script></div>
